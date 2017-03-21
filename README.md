@@ -1,2 +1,2 @@
 # conll17-dependency-parsing
-Repository for the Dependency Parsing project, formed for CoNLL 2017.
+Repository formed for CoNLL 2017 Dependency Parsing project.
