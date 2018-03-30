@@ -105,10 +105,6 @@ function Chu_Liu_Edmonds(V,lambda)
 end
 =#
 
-# minimum spanning tree algoritmaları incelenecek
-
-# parsing paper'larında algoritmalar ve loss function'lar incelenecek
-
 function Chu_Liu_Edmonds(V,lambda)
     A_prime=[]
     n=length(V)
@@ -186,7 +182,6 @@ function CKY(V,lambda)
     return C[1,n+1,1],A[1,n+1,1]
 end
 
-# Eisner seems to be working now :)))))
 function Eisner(S, lambda)
     n=length(S)
     E=Array{Any}(n,n,2,2)
@@ -279,15 +274,8 @@ function Eisner(S, lambda)
     push!(A[1,n,2,1],(0,findfirst(dependents)))=#
     E[1,n+1,2,1],A[1,n+1,2,1]
 end
-# I gonna cry now :'|
 
 #sigm(x) = (1./(1+exp(-x)))
-
-# logistic loss, sigmoid
-# negative log probability uygulanacak doğru cevaplara
-# sum p log_phat + (1-p) log (1-phat)
-#knet Array'erde loop yerine vectorize işlemler yapılacak
-#elementwise sigmoid uygulanacak
 
 function mse(ygold, ypred)
     sum((ygold-ypred).^2)
