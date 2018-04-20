@@ -105,6 +105,44 @@ function Chu_Liu_Edmonds(V,lambda)
 end
 =#
 
+function find_cycle(A_prime)
+    visited=nothing
+    cycle=nothing
+    for pair in A_prime
+        visited=[]
+        head=pair[1]
+        push!(visited,pair)
+#        parents=filter(pair -> pair[2] == head, A_prime)
+        nextindex=findfirst( arc -> arc[2] == head, A_prime )
+        cycle_found=false
+        while nextindex>0
+            next_arc=A_prime[nextindex]
+            cycle_start=findfirst( arc -> arc == next_arc, visited )
+            if cycle_start>0
+                cycle_found=true
+                cycle=visited[cycle_start:end]
+                break
+            end
+            head=next_arc[1]
+            push!(visited,next_arc)
+            nextindex=findfirst( arc -> arc[2] == head, A_prime )
+        end
+        cycle_found &&
+            break
+    end
+    cycle
+end
+
+function contract(V, A, C, lambda)
+    Gc = Array{Any,1}( filter( arc -> !(arc in C), A ) )
+    push!(Gc,C)
+    Vc = V[ unique( append!( [arc[1] for arc in C], [arc[2] for arc in C] ) ) ]
+    Vc = filter( word -> !(word in Vc), V )
+    Vc = find( word -> word in Vc, V)
+    for wj in Vc
+    end
+end
+
 function Chu_Liu_Edmonds(V,lambda)
     A_prime=[]
     n=length(V)
@@ -115,25 +153,13 @@ function Chu_Liu_Edmonds(V,lambda)
             push!(A_prime,(max_index-1,i-1))
         end
     end
-    visited=[]
-    cycle=nothing
-    for pair in A_prime
-        head=pair[1]
-        push!(visited,pair)
-#        parents=filter(pair -> pair[2] == head, A_prime)
-        slowindex=findfirst( arc -> arc[2] == head, A_prime )
-        while slowindex>0
-            slow=A_prime[slowindex]
-            cycle_start=findfirst( arc -> arc == slow, visited )
-            if cycle_start>0
-                cycle=visited[cycle_start:end]
-            end
-            head=slow[1]
-            push!(visited,slow)
-            slowindex=findfirst( arc -> arc[2] == head, A_prime )
-        end
-    end
-    cycle,A_prime
+    Ac=find_cycle(A_prime)
+    
+    Ac == nothing &&
+        return A_prime
+    
+#    Ac = A_prime[ find( arc -> arc in cycle, A_prime ) ]
+    contract(V, A_prime, cycle, lambda)
 end
 
 function CKY(V,lambda)
@@ -198,8 +224,7 @@ function Eisner(S, lambda)
     for m=1:n+1
         for s=1:n+1
             t=s+m
-            if t>n+1 break
-            end
+            t>n+1 && break
             max_score=max_q=-1
             for q=s:t-1
                 tree_score=E[s,q,2,1]+E[q+1,t,1,1]+lambda[t,s]
@@ -247,7 +272,6 @@ function Eisner(S, lambda)
                 A[s,t,1,1]=union(A[s,max_q,1,1],A[max_q,t,1,2])
             end
             max_score=max_q=-1
-            
             for q=s+1:t
                 tree_score=E[s,q,2,2]+E[q,t,2,1]
                 if tree_score>max_score
@@ -274,8 +298,6 @@ function Eisner(S, lambda)
     push!(A[1,n,2,1],(0,findfirst(dependents)))=#
     E[1,n+1,2,1],A[1,n+1,2,1]
 end
-
-#sigm(x) = (1./(1+exp(-x)))
 
 function mse(ygold, ypred)
     sum((ygold-ypred).^2)
@@ -356,10 +378,23 @@ function predict(weight, arc_feat, n)
     return lambda
 end
 
+function softmax(scores)
+    e_s = exp.(scores)
+    return e_s./sum(e_s,1)
+end
+
+
 function graph_loss(weight, arc_feat, n, lambda_gold#=, optim=#)
     lambda_pred = predict(weight, arc_feat, n)
-    return mse(lambda_pred, lambda_gold)
-    #return nll(lambda_pred, lambda_gold)
+    lambda_soft = softmax(lambda_pred[:,2:end])
+    soft_scores=zeros(n+1,n)
+    for i=1:n
+        ynorm = lambda_soft[:,i] .- log(sum(exp.(lambda_soft[:,i]),1))
+        for j=1:n+1
+            soft_scores[j,i]=ynorm[j]
+        end
+    end
+    return -mean(soft_scores)
 end
 
 graph_loss_grad = grad(graph_loss)  #grads. shape is the same as weight.
@@ -385,6 +420,30 @@ test_lambda=[0.0 0.0 0.0 0.0;
              0.0 0.0 0.0 0.0;
              0.0 1.0 0.0 1.0;
              0.0 0.0 0.0 0.0]
+
+function test_CKY()
+    N=length(sentences)
+    for i=1:N
+        n=length(sentences[i])
+        lambda_gold=zeros(n+1,n+1)
+        for j=1:length(parentlists[i])
+            lambda_gold[parentlists[i][j]+1,j+1]=1
+        end
+        CKY(sentences[i],lambda_gold)
+    end
+end
+
+function test_Eisner()
+    N=length(sentences)
+    for i=1:N
+        n=length(sentences[i])
+        lambda_gold=zeros(n+1,n+1)
+        for j=1:length(parentlists[i])
+            lambda_gold[parentlists[i][j]+1,j+1]=1
+        end
+        Eisner(sentences[i],lambda_gold)
+    end
+end
 
 #display(Eisner(test_sentence, test_lambda))
 
