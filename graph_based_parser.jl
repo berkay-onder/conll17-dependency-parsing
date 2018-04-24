@@ -324,7 +324,7 @@ features=[]
 gold_scores=[]
 sentence_lengths=[]
 
-for i=1:2#length(sentences)
+for i=1:length(sentences)
 #i=1
     n=length(sentences[i])
     #wembed=zeros(wordcount+1,n)
@@ -344,6 +344,7 @@ for i=1:2#length(sentences)
             push!(arc_features,vcat(wembeds[j],wembeds[k]))
         end
     end
+    arc_features = (hcat(arc_features...))';
     lambda_gold=zeros(n+1,n+1)
     for j=1:length(parentlists[i])
         lambda_gold[parentlists[i][j]+1,j+1]=1
@@ -354,7 +355,7 @@ for i=1:2#length(sentences)
     push!(sentence_lengths,n)
 end
 
-weight=0.01*rand(length(features[1][1]))
+weight=0.01*rand(size(features[1],2))
 
 #=for i=1:5#length(sentences)
     pred_scores=predict(weight, features[i], sentence_lengths[i])
@@ -367,40 +368,51 @@ optim=optimizers(weight,Adam,lr=0.001)
 #word_scores=weight'*wembed
 
 function predict(weight, arc_feat, n)
-    lambda = Array{Any}(zeros(n+1,n+1))
-    for j=1:n
-        for k=1:n
-            #println("$(j+1), $(k+1), $lambda[j+1,k+1]")
-            lambda[j+1,k+1] = j==k ? 0:
-            weight'*arc_feat[n*(j-1)+k]
-        end
-    end
-    return lambda
+    scr = arc_feat * weight
+    scr = (reshape(scr, n, n))'
+    scr = scr .* (1 .- eye(n,n))
+    x1 = vcat(zeros(1,n), eye(n,n))
+    x2 = hcat(zeros(n,1), eye(n,n))
+    result = x1 *scr *x2
+    return result
 end
-
-function softmax(scores)
-    e_s = exp.(scores)
-    return e_s./sum(e_s,1)
-end
-
 
 function graph_loss(weight, arc_feat, n, lambda_gold#=, optim=#)
     lambda_pred = predict(weight, arc_feat, n)
-    lambda_soft = softmax(lambda_pred[:,2:end])
-    soft_scores=zeros(n+1,n)
-    for i=1:n
-        ynorm = lambda_soft[:,i] .- log(sum(exp.(lambda_soft[:,i]),1))
-        for j=1:n+1
-            soft_scores[j,i]=ynorm[j]
-        end
+    lambda_soft = exp.(logp(lambda_pred[:,2:end], 1))
+    soft_scores = lambda_soft[:,1] .- log.(sum(exp.(lambda_soft[:,1]),1))
+    for i=2:n
+        soft_scores = hcat(soft_scores, lambda_soft[:,i] .- log.(sum(exp.(lambda_soft[:,i]),1)))
     end
     return -mean(soft_scores)
 end
 
+#=
+    soft_scores = zeros(n+1,n)
+    for i=1:n
+        ynorm = lambda_soft[:,i] .- log.(sum(exp.(lambda_soft[:,i]),1))
+        for j=1:n+1
+            soft_scores[j,i]=ynorm[j]
+        end
+    end
+    return soft_scores
+=#
+
+#=
+    lambda_pred = predict(weight, arc_feat, n)
+    lambda_soft = exp.(logp(lambda_pred[:,2:end], 1))
+    soft_scores = zeros(n+1)'
+    for i=1:n
+        ynorm = lambda_soft[:,i] .- log.(sum(exp.(lambda_soft[:,i]),1))
+        soft_scores=vcat(soft_scores, ynorm')
+    end
+    return soft_scores
+=#
+
 graph_loss_grad = grad(graph_loss)  #grads. shape is the same as weight.
 
 function train!(weight, sentences, features, gold_scores, optim)
-    for i=1:2#length(sentences)
+    for i=1:length(sentences)
         n=length(sentences[i])
         grads=graph_loss_grad(weight, features[i], n, gold_scores[i])
         update!(weight, grads, optim)
