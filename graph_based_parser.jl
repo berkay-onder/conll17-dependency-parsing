@@ -319,6 +319,8 @@ end
 #w=randn(4*fsize+68)
 #fvector=Array{Float64}(4*fsize+68)
 sentences,postaglists,parentlists=read_conllfile("en-ud-dev.conllu")
+
+#=
 sentence_embeddings=[]
 features=[]
 gold_scores=[]
@@ -349,13 +351,17 @@ for i=1:length(sentences)
     for j=1:length(parentlists[i])
         lambda_gold[parentlists[i][j]+1,j+1]=1
     end
+    
     push!(sentence_embeddings, wembeds)
     push!(features,arc_features)
     push!(gold_scores,lambda_gold)
     push!(sentence_lengths,n)
+    
 end
 
-weight=0.01*rand(size(features[1],2))
+=#
+
+# weight=0.01*rand(size(features[1],2))
 
 #=for i=1:5#length(sentences)
     pred_scores=predict(weight, features[i], sentence_lengths[i])
@@ -363,7 +369,7 @@ weight=0.01*rand(size(features[1],2))
 end=#
 
 #lambda=zeros(n+1,n+1)
-optim=optimizers(weight,Adam,lr=0.001)
+#optim=optimizers(weight,Adam,lr=0.001)
 
 #word_scores=weight'*wembed
 
@@ -411,6 +417,7 @@ end
 
 graph_loss_grad = grad(graph_loss)  #grads. shape is the same as weight.
 
+#=
 function train!(weight, sentences, features, gold_scores, optim)
     for i=1:length(sentences)
         n=length(sentences[i])
@@ -418,15 +425,99 @@ function train!(weight, sentences, features, gold_scores, optim)
         update!(weight, grads, optim)
     end
 end
+=#
 
-lambda = predict(weight, features[1], sentence_lengths[1])
-#Chu_Liu_Edmonds(sentences[1], lambda)
+function train!(weight, sentence, features, gold_scores, optim)
+    n=length(sentence)
+    grads=graph_loss_grad(weight, features, n, gold_scores)
+    update!(weight, grads, optim)
+end
+
+n=length(sentences[1])
+wembeds=[]
+for j=1:n
+    wembed=zeros(wordcount+1)
+    if(haskey(wordlist, sentences[1][j]))
+        wembed[wordlist[sentences[1][j]]]=1.0
+    else
+        wembed[end]=1.0
+    end
+    push!(wembeds,wembed)
+end
+arc_features=[]
+for j=1:n
+    for k=1:n
+        push!(arc_features,vcat(wembeds[j],wembeds[k]))
+    end
+end
+arc_features = (hcat(arc_features...))';
+lambda_gold=zeros(n+1,n+1)
+for j=1:length(parentlists[1])
+    lambda_gold[parentlists[1][j]+1,j+1]=1
+end
+    
+#=
+push!(sentence_embeddings, wembeds)
+push!(features,arc_features)
+push!(gold_scores,lambda_gold)
+push!(sentence_lengths,n)
+=#
+    
+weight=0.01*rand(size(arc_features,2))
+optim=optimizers(weight,Adam,lr=0.001)
+
+lambda = predict(weight, arc_features, n)
+
+train!(weight, sentences[1], arc_features, lambda_gold, optim)
+
+for i=2:length(sentences)
+#i=1
+    n=length(sentences[i])
+    #wembed=zeros(wordcount+1,n)
+    wembeds=[]
+    for j=1:n
+        wembed=zeros(wordcount+1)
+        if(haskey(wordlist, sentences[i][j]))
+            wembed[wordlist[sentences[i][j]]]=1.0
+        else
+            wembed[end]=1.0
+        end
+        push!(wembeds,wembed)
+    end
+    arc_features=[]
+    for j=1:n
+        for k=1:n
+            push!(arc_features,vcat(wembeds[j],wembeds[k]))
+        end
+    end
+    arc_features = (hcat(arc_features...))';
+    lambda_gold=zeros(n+1,n+1)
+    for j=1:length(parentlists[i])
+        lambda_gold[parentlists[i][j]+1,j+1]=1
+    end
+    
+    #=
+    push!(sentence_embeddings, wembeds)
+    push!(features,arc_features)
+    push!(gold_scores,lambda_gold)
+    push!(sentence_lengths,n)
+    =#
+    
+    weight=0.01*rand(size(arc_features,2))
+    optim=optimizers(weight,Adam,lr=0.001)
+    
+    lambda = predict(weight, arc_features, n)
+    
+    train!(weight, sentences[i], arc_features, lambda_gold, optim)
+    
+    println(graph_loss(weight, arc_features, n, lambda_gold))
+    
+end
+
+#=
 display(CKY(sentences[1], lambda))
 
 test_sentence=["a","b","c"]
-#=test_lambda=[0.0 0.0 0.0;
-             1.0 0.0 1.0;
-             0.0 0.0 0.0]=#
              
 test_lambda=[0.0 0.0 0.0 0.0;
              0.0 0.0 0.0 0.0;
@@ -457,50 +548,4 @@ function test_Eisner()
     end
 end
 
-#display(Eisner(test_sentence, test_lambda))
-
-#=
-    for j=1:n
-        lambda[1,j+1]=1-word_scores[j]
-    end
-    for j=1:n
-        for k=1:n
-            lambda[j+1,k+1]=abs(word_scores[j]-word_scores[k])
-        end
-    end
-
-    for j=1:n
-        for k=1:n
-            lambda[j+1,k+1]=abs(word_scores[j]-word_scores[k])
-        end
-    end
-lambda_gold=zeros(n+1,n+1)
-for j=1:length(parentlists[i])
-    lambda_gold[parentlists[i][j]+1,j+1]=1
-end
 =#
-    #display(CKY(sentences[i],lambda_gold))
-#end
-
-#CKY(sentences[1])
-#println(length(sentences))
-#for V in sentences
-#    n=length(V)
-#    A=[(0,1)]  # Arcset
-#    for i=2:n
-#        push!(A,(0,i))
-#    end
-#    for i=1:n
-#        for j=1:n
-#            if i!=j
-#                push!(A,(i,j))
-#            end
-#        end
-#    end
-#    G=(V,A)
-#    lambda=rand(n+1,n)
-#    for i=1:n
-#        lambda[i+1,i]=0
-#    end
-#    Chu_Liu_Edmonds(G,lambda)
-#end
